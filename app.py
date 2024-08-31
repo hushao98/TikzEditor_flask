@@ -1,10 +1,35 @@
-from flask import Flask, request, jsonify
+import subprocess
+import time
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 CORS(app)
 
+def run_my_process(cmds):
+    print(f"cmds: {cmds}")
+    try:
+        process = subprocess.Popen(
+            cmds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
+    except Exception as e:
+        print(e)
+    try:
+        while True:
+            line = process.stderr.readline()
+            if line == "" and process.poll() is not None:
+                break
+            print(line, end="")
+    finally:
+        process.stdout.close()
 
+        
 def convert_to_tikz(data):
     tikz_code = []
     custom_colors = {}
@@ -74,6 +99,31 @@ def generate_tikz():
     }
 
     return jsonify(response)
+
+
+@app.route('/api/generate-graphic', methods=['POST'])
+def generate_graphic():
+    data = request.json
+
+    tikz_code = data['tikz_code']
+
+    loca=time.strftime('%Y-%m-%d_%H-%M-%S')
+    tex_name = str(loca) + ".tex"
+    tex_path = os.path.join('cache\\tex', tex_name)
+
+    with open(tex_path, 'w', encoding='utf-8') as file:
+        file.write(tikz_code)
+
+    cmd = 'xelatex -output-directory=cache/pdf cache/tex/' + tex_name
+    code = os.system(cmd)
+
+    if not code:
+        pdf_name = str(loca) + ".pdf"
+        pdf_path = os.path.join('cache\\pdf', pdf_name)
+
+        return send_file(pdf_path)
+
+    return send_file('msg\\compile_error.pdf')
 
 
 if __name__ == '__main__':
